@@ -86,6 +86,7 @@
 #include "llvm/Transforms/Utils/ModuleUtils.h"
 #include "llvm/Transforms/Utils/NameAnonGlobals.h"
 #include "llvm/Transforms/Utils/SymbolRewriter.h"
+#include "llvm/Transforms/Utils/MojPass.h"
 #include <memory>
 using namespace clang;
 using namespace llvm;
@@ -909,13 +910,20 @@ void EmitAssemblyHelper::RunOptimizationPipeline(
     } else {
       MPM = PB.buildPerModuleDefaultPipeline(Level);
     }
-
+    
     if (!CodeGenOpts.MemoryProfileOutput.empty()) {
       MPM.addPass(createModuleToFunctionPassAdaptor(MemProfilerPass()));
       MPM.addPass(ModuleMemProfilerPass());
     }
+    
   }
-
+  /*OptimizationLevel Level1 = mapToLevel(CodeGenOpts);
+  if(Level1 == OptimizationLevel::O0){
+      llvm::dbgs()<<"provera\n";//diff
+      MPM.addPass(createModuleToFunctionPassAdaptor(MojPassClass()));
+  }else{
+  llvm::dbgs()<<"provera basfadf\n";//diff
+  }*/
   // Add a verifier pass if requested. We don't have to do this if the action
   // requires code generation because there will already be a verifier pass in
   // the code-generation pipeline.
@@ -958,7 +966,8 @@ void EmitAssemblyHelper::RunOptimizationPipeline(
   default:
     break;
   }
-
+  //llvm::dbgs()<<"Moj Pass dodaj novooo\n";//diff
+  //MPM.addPass(createModuleToFunctionPassAdaptor(MojPassClass()));
   // Now that we have all of the passes ready, run them.
   {
     PrettyStackTraceString CrashInfo("Optimizer");

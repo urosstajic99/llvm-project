@@ -127,6 +127,7 @@
 #include "llvm/Transforms/Vectorize/LoopVectorize.h"
 #include "llvm/Transforms/Vectorize/SLPVectorizer.h"
 #include "llvm/Transforms/Vectorize/VectorCombine.h"
+#include "llvm/Transforms/Utils/MojPass.h"
 
 using namespace llvm;
 
@@ -434,7 +435,6 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
   FPM.addPass(InstCombinePass());
   if (Level == OptimizationLevel::O3)
     FPM.addPass(AggressiveInstCombinePass());
-
   if (!Level.isOptimizingForSize())
     FPM.addPass(LibCallsShrinkWrapPass());
 
@@ -604,6 +604,9 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
        PGOOpt->Action == PGOOptions::SampleUse))
     FPM.addPass(ControlHeightReductionPass());
 
+  //if(Level == OptimizationLevel::O3){
+  	//FPM.addPass(MojPassClass());
+  //}
   return FPM;
 }
 
@@ -953,6 +956,8 @@ PassBuilder::buildModuleSimplificationPipeline(OptimizationLevel Level,
   // Remove any dead arguments exposed by cleanups and constant folding
   // globals.
   MPM.addPass(DeadArgumentEliminationPass());
+  
+  MPM.addPass(createModuleToFunctionPassAdaptor(MojPassClass()));
 
   // Create a small function pass pipeline to cleanup after all the global
   // optimizations.
@@ -1749,6 +1754,8 @@ ModulePassManager PassBuilder::buildO0DefaultPipeline(OptimizationLevel Level,
 
   ModulePassManager MPM;
 
+llvm::dbgs()<<"Moj Pass dodaj\n";//diff
+  //MPM.addPass(createModuleToFunctionPassAdaptor(MojPassClass()));
   // Perform pseudo probe instrumentation in O0 mode. This is for the
   // consistency between different build modes. For example, a LTO build can be
   // mixed with an O0 prelink and an O2 postlink. Loading a sample profile in
