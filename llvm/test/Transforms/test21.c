@@ -3,19 +3,17 @@
 // CHECK: entry:
 // CHECK: %cmp = icmp eq i32 %x, 0
 // CHECK: br i1 %cmp, label %return, label %if.end
-// CHECK: if.end:
-// CHECK: %sub = sub i32 0, %x
-// CHECK: %and = and i32 %sub, %x
-// CHECK: %mul = mul i32 %and, 81224991
-// CHECK: %shr = lshr i32 %mul, 27
-// CHECK: %idxprom = zext i32 %shr to i64
-// CHECK: %arrayidx = getelementptr inbounds [32 x i8], [32 x i8]* @ctz.table, i64 0, i64 %idxprom
-// CHECK: %0 = load i8, i8* %arrayidx, align 1, !tbaa !4
-// CHECK: %conv = sext i8 %0 to i32
+// CHECK: if.end:                                           ; preds = %entry
+// CHECK: %0 = call i32 @llvm.cttz.i32(i32 %x, i1 true)
+// CHECK: %1 = icmp eq i32 %x, 0
+// CHECK: %2 = trunc i32 %0 to i8
+// CHECK: %conv = sext i8 %2 to i32
 // CHECK: br label %return
-// CHECK: return:
-// CHECK: %retval.0 = phi i32 [ %conv, %if.end ], [ 32, %entry ]
-// CHECK: ret i32 %retval.0
+// CHECK: return:                                           ; preds = %if.end, %entry
+// CHECK:  %retval.0 = phi i32 [ %conv, %if.end ], [ 32, %entry ]
+// CHECK:  ret i32 %retval.0
+
+
 
 int cttz(unsigned x) {
 	static char table[32] =
@@ -25,4 +23,3 @@ int cttz(unsigned x) {
 	x = (x & -x)*0x04D7651F;
 	return table[x >> 27];
 }
-
