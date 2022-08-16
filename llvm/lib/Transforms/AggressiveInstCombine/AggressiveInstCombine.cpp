@@ -334,7 +334,7 @@ static bool tryToRecognizePopCount(Instruction &I) {
   Value *MulOp0;
   // Matching "(i * 0x01010101...) >> 24".
   if ((match(Op0, m_Mul(m_Value(MulOp0), m_SpecificInt(Mask01)))) &&
-       match(Op1, m_SpecificInt(MaskShift))) {
+      match(Op1, m_SpecificInt(MaskShift))) {
     Value *ShiftOp0;
     // Matching "((i + (i >> 4)) & 0x0F0F0F0F...)".
     if (match(MulOp0, m_And(m_c_Add(m_LShr(m_Value(ShiftOp0), m_SpecificInt(4)),
@@ -439,83 +439,102 @@ static bool isCTTZTable(const ConstantDataArray &Table, uint64_t Mul,
 static bool tryToRecognizeTableBasedCttz(Instruction &I) {
 
   LoadInst *LI = dyn_cast<LoadInst>(&I);
-  if (!LI) return false;
+  if (!LI)
+    return false;
 
   // TODO: Support opaque pointers.
   Type *PtrTy = LI->getPointerOperand()->getType();
-  if (PtrTy->isOpaquePointerTy()) return false;
+  if (PtrTy->isOpaquePointerTy())
+    return false;
 
   Type *ElType = LI->getPointerOperandType()->getNonOpaquePointerElementType();
-  if (!ElType->isIntegerTy()) return false;
+  if (!ElType->isIntegerTy())
+    return false;
 
   GetElementPtrInst *GEP = dyn_cast<GetElementPtrInst>(LI->getPointerOperand());
-  if (!GEP || !GEP->isInBounds() || GEP->getNumIndices() != 2) return false;
+  if (!GEP || !GEP->isInBounds() || GEP->getNumIndices() != 2)
+    return false;
 
   // TODO: Support opaque pointers.
   Type *PointeeTy = GEP->getPointerOperand()->getType();
-  if (PointeeTy->isOpaquePointerTy()) return false;
+  if (PointeeTy->isOpaquePointerTy())
+    return false;
 
   Type *GEPPointeeType =
       GEP->getPointerOperandType()->getNonOpaquePointerElementType();
-  if (!GEPPointeeType->isArrayTy()) return false;
+  if (!GEPPointeeType->isArrayTy())
+    return false;
 
   uint64_t ArraySize = GEPPointeeType->getArrayNumElements();
-  if (ArraySize != 32 && ArraySize != 64) return false;
+  if (ArraySize != 32 && ArraySize != 64)
+    return false;
 
   User *GEPUser = dyn_cast<User>(GEP->getPointerOperand());
-  if (!GEPUser) return false;
+  if (!GEPUser)
+    return false;
 
   ConstantDataArray *ConstData =
       dyn_cast<ConstantDataArray>(GEPUser->getOperand(0));
-  if (!ConstData) return false;
+  if (!ConstData)
+    return false;
 
   Value *Idx1 = GEP->idx_begin()->get();
   Constant *Zero = dyn_cast<Constant>(Idx1);
-  if (!Zero || !Zero->isZeroValue()) return false;
+  if (!Zero || !Zero->isZeroValue())
+    return false;
 
   Value *Idx2 = std::next(GEP->idx_begin())->get();
-  
+
   bool ConstIsWide = !match(Idx2, m_ZExt(m_Value()));
-  if(match(Idx2, m_LShr(m_Value(), m_Value())) && Idx2->getType()->isIntegerTy(32)) ConstIsWide=false;
-  
+  if (match(Idx2, m_LShr(m_Value(), m_Value())) &&
+      Idx2->getType()->isIntegerTy(32))
+    ConstIsWide = false;
+
   Value *X1;
   uint64_t MulConst, ShiftConst;
-  
-  if (match(Idx2, m_ZExt(m_Value())) && 
-  		!match(Idx2, m_ZExtOrSelf(m_LShr( 
-  			 m_ZExtOrSelf(m_Mul(m_c_And(m_Neg(m_Value(X1)), m_Deferred(X1)), 
-  		 				m_ConstantInt(MulConst))),
-  		 	 m_ConstantInt(ShiftConst)))))            
+
+  if (match(Idx2, m_ZExt(m_Value())) &&
+      !match(Idx2,
+             m_ZExtOrSelf(m_LShr(
+                 m_ZExtOrSelf(m_Mul(m_c_And(m_Neg(m_Value(X1)), m_Deferred(X1)),
+                                    m_ConstantInt(MulConst))),
+                 m_ConstantInt(ShiftConst)))))
     return false;
-  
+
   if (match(Idx2, m_LShr(m_Value(), m_Value())) &&
-  		 !match(Idx2, m_LShr(m_Mul(m_c_And(m_Neg(m_Value(X1)), m_Deferred(X1)),
-                                    		m_ConstantInt(MulConst)),
+      !match(Idx2, m_LShr(m_Mul(m_c_And(m_Neg(m_Value(X1)), m_Deferred(X1)),
+                                m_ConstantInt(MulConst)),
                           m_ConstantInt(ShiftConst))))
     return false;
-  
-  if (match(Idx2, m_Trunc(m_Value())) && 
-  		!match(Idx2, m_Trunc(m_LShr(m_Mul(m_c_And(m_Neg(m_Value(X1)), m_Deferred(X1)),
-  						m_ConstantInt(MulConst)), 
-  			m_ConstantInt(ShiftConst)))) && !match(Idx2, m_Trunc(m_LShr(m_Mul(m_ZExt(m_c_And(m_Neg(m_Value(X1)), m_Deferred(X1))),
-  						m_ConstantInt(MulConst)), 
-  			m_ConstantInt(ShiftConst)))))
-      return false;
-      
+
+  if (match(Idx2, m_Trunc(m_Value())) &&
+      !match(Idx2,
+             m_Trunc(m_LShr(m_Mul(m_c_And(m_Neg(m_Value(X1)), m_Deferred(X1)),
+                                  m_ConstantInt(MulConst)),
+                            m_ConstantInt(ShiftConst)))) &&
+      !match(Idx2, m_Trunc(m_LShr(m_Mul(m_ZExt(m_c_And(m_Neg(m_Value(X1)),
+                                                       m_Deferred(X1))),
+                                        m_ConstantInt(MulConst)),
+                                  m_ConstantInt(ShiftConst)))))
+    return false;
+
   unsigned InputBits = ConstIsWide ? 64 : 32;
 
   // Shift should extract top 5..7 bits.
-  if (ShiftConst < InputBits - 7 || ShiftConst > InputBits - 5) return false;
+  if (ShiftConst < InputBits - 7 || ShiftConst > InputBits - 5)
+    return false;
 
   Type *XType = X1->getType();
 
-  if (!XType->isIntegerTy(InputBits) && 
-  	!match(Idx2, m_Trunc(m_LShr(m_Mul(m_ZExt(m_c_And(
-  		m_Neg(m_Value(X1)), m_Deferred(X1))), m_ConstantInt(MulConst)),
-  			 m_ConstantInt(ShiftConst))))) return false;
+  if (!XType->isIntegerTy(InputBits) &&
+      !match(Idx2, m_Trunc(m_LShr(m_Mul(m_ZExt(m_c_And(m_Neg(m_Value(X1)),
+                                                       m_Deferred(X1))),
+                                        m_ConstantInt(MulConst)),
+                                  m_ConstantInt(ShiftConst)))))
+    return false;
 
-  if (!isCTTZTable(*ConstData, MulConst, ShiftConst, InputBits)) return false;
-  
+  if (!isCTTZTable(*ConstData, MulConst, ShiftConst, InputBits))
+    return false;
 
   auto ZeroTableElem = ConstData->getElementAsInteger(0);
   bool DefinedForZero = ZeroTableElem == InputBits;

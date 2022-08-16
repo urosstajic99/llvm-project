@@ -242,7 +242,7 @@ entry:
 define dso_local i32 @ctz7(i32 noundef signext %x) local_unnamed_addr #0 {
 ; CHECK-LABEL: @ctz7(
 ; CHECK-NEXT:  entry:
-; CHECK-NEXT:    [[TMP0:%.*]] = call i32 @llvm.cttz.i32(i32 [[X:%.*]], i1 true)
+; CHECK-NEXT:    [[TMP0:%.*]] = call i32 @llvm.cttz.i32(i32 [[X:%.]], i1 true)
 ; CHECK-NEXT:    [[TMP1:%.*]] = icmp eq i32 [[X]], 0
 ; CHECK-NEXT:    [[TMP2:%.*]] = select i1 [[TMP1]], i32 0, i32 [[TMP0]]
 ; CHECK-NEXT:    [[TMP3:%.*]] = trunc i32 [[TMP2]] to i8
