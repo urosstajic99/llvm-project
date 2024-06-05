@@ -315,6 +315,17 @@ static alias VerboseAlias("v", desc("Alias for --verbose."), aliasopt(Verbose),
                           cat(DwarfDumpCategory), cl::NotHidden);
 static cl::extrahelp
     HelpResponse("\nPass @FILE as argument to read options from FILE.\n");
+
+static opt<bool>
+    DiffSectionSizes("diff-section-sizes",
+                     cl::desc("Diffing section sizes among multiple inputs"),
+                     cat(DwarfDumpCategory));
+
+static opt<bool> DiffSectionSizesBaseFile(
+    "base",
+    cl::desc("Base file for diffing section sizes among multiple inputs"),
+    cat(DwarfDumpCategory));
+
 } // namespace
 /// @}
 //===----------------------------------------------------------------------===//
@@ -392,6 +403,9 @@ static bool filterArch(ObjectFile &Obj) {
 
 using HandlerFn = std::function<bool(ObjectFile &, DWARFContext &DICtx,
                                      const Twine &, raw_ostream &)>;
+
+using HandlerFnSectionSizes = std::function<SectionSizes(
+    ObjectFile &, DWARFContext &DICtx, const Twine &, raw_ostream &)>;
 
 /// Print only DIEs that have a certain name.
 static bool filterByName(
@@ -809,6 +823,46 @@ static bool handleBuffer(StringRef Filename, MemoryBufferRef Buffer,
   return Result;
 }
 
+static SectionSizes handleBufferSectionSizes(StringRef Filename,
+                                             MemoryBufferRef Buffer,
+                                             HandlerFnSectionSizes HandleObj,
+                                             raw_ostream &OS) {
+  Expected<std::unique_ptr<Binary>> BinOrErr = object::createBinary(Buffer);
+  error(Filename, BinOrErr.takeError());
+
+  SectionSizes Sizes;
+  bool Result = true;
+  auto RecoverableErrorHandler = [&](Error E) {
+    Result = false;
+    WithColor::defaultErrorHandler(std::move(E));
+  };
+  if (auto *Obj = dyn_cast<ObjectFile>(BinOrErr->get())) {
+    if (filterArch(*Obj)) {
+      std::unique_ptr<DWARFContext> DICtx = DWARFContext::create(
+          *Obj, DWARFContext::ProcessDebugRelocations::Process, nullptr, "",
+          RecoverableErrorHandler);
+      DICtx->setParseCUTUIndexManually(ManuallyGenerateUnitIndex);
+      Sizes = HandleObj(*Obj, *DICtx, Filename, OS);
+    }
+  } else if (auto *Fat = dyn_cast<MachOUniversalBinary>(BinOrErr->get()))
+    for (auto &ObjForArch : Fat->objects()) {
+      std::string ObjName =
+          (Filename + "(" + ObjForArch.getArchFlagName() + ")").str();
+      if (auto MachOOrErr = ObjForArch.getAsObjectFile()) {
+        auto &Obj = **MachOOrErr;
+        if (filterArch(Obj)) {
+          std::unique_ptr<DWARFContext> DICtx = DWARFContext::create(
+              Obj, DWARFContext::ProcessDebugRelocations::Process, nullptr, "",
+              RecoverableErrorHandler);
+          Sizes = HandleObj(Obj, *DICtx, ObjName, OS);
+        }
+        continue;
+      } else
+        consumeError(MachOOrErr.takeError());
+    }
+  return Sizes;
+}
+
 static bool handleFile(StringRef Filename, HandlerFn HandleObj,
                        raw_ostream &OS) {
   ErrorOr<std::unique_ptr<MemoryBuffer>> BuffOrErr =
@@ -816,6 +870,16 @@ static bool handleFile(StringRef Filename, HandlerFn HandleObj,
   error(Filename, BuffOrErr.getError());
   std::unique_ptr<MemoryBuffer> Buffer = std::move(BuffOrErr.get());
   return handleBuffer(Filename, *Buffer, HandleObj, OS);
+}
+
+static SectionSizes handleFileSectionSizes(StringRef Filename,
+                                           HandlerFnSectionSizes HandleObj,
+                                           raw_ostream &OS) {
+  ErrorOr<std::unique_ptr<MemoryBuffer>> BuffOrErr =
+      MemoryBuffer::getFileOrSTDIN(Filename);
+  error(Filename, BuffOrErr.getError());
+  std::unique_ptr<MemoryBuffer> Buffer = std::move(BuffOrErr.get());
+  return handleBufferSectionSizes(Filename, *Buffer, HandleObj, OS);
 }
 
 int main(int argc, char **argv) {
@@ -914,6 +978,14 @@ int main(int argc, char **argv) {
   } else if (ShowSources) {
     for (StringRef Object : Objects)
       Success &= handleFile(Object, collectObjectSources, OutputFile.os());
+  } else if (DiffSectionSizes) {
+    std::vector<SectionSizes> secSizesForAllInputFiles;
+    for (StringRef Object : Objects) {
+      secSizesForAllInputFiles.push_back(handleFileSectionSizes(
+          Object, collectObjectDiffSectionSizes, OutputFile.os()));
+    }
+    processAllSectionSizes(secSizesForAllInputFiles, OutputFile.os(),
+                           DiffSectionSizesBaseFile);
   } else {
     for (StringRef Object : Objects)
       Success &= handleFile(Object, dumpObjectFile, OutputFile.os());
